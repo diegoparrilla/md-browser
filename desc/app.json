@@ -1,7 +1,7 @@
 {
   "uuid": "<APP_UUID>",
   "name": "File and Download manager",
-  "description": "Browse and download floppy image collections right from the repository or custom locations <a target='_blank' rel='noopener noreferrer' href='https://docs.sidecartridge.com/sidecartridge-multidevice/microfirmwares/multidevice-browser/'>Learn how</a>",
+  "description": "Browse and download floppy image collections right from the repository or custom locations <a target='_blank' rel='noopener noreferrer' href='https://docs.sidecartridge.com/sidecartridge-multidevice/microfirmwares/browser/'>Learn how</a>",
   "image": "https://placehold.co/256x256/png",
   "tags": [
     "Catalogs",
