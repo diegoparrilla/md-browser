@@ -11,6 +11,9 @@
 
 #include "hardware/vreg.h"
 
+// Title of the microfirmware
+#define BROWSER_TITLE "File and Download Manager"
+
 // Common macros
 #define HEX_BASE 16
 #define DEC_BASE 10

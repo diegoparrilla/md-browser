@@ -80,7 +80,7 @@ typedef struct {
  * @return A download_err_t code indicating a successful start or a specific
  * error.
  */
-download_err_t download_start(void);
+download_err_t download_start();
 
 /**
  * @brief Polls the download process by invoking the asynchronous context
@@ -102,18 +102,6 @@ download_poll_t download_poll(void);
  * encountered.
  */
 download_err_t download_finish(void);
-
-/**
- * @brief Renames the temporary download file to its final filename.
- *
- * Generates the final file path based on application configuration and deletes
- * any pre-existing file. Ensures integrity by checking the result of the rename
- * operation.
- *
- * @return A download_err_t code indicating a successful rename or an error code
- * if renaming fails.
- */
-download_err_t download_confirm(void);
 
 /**
  * @brief Retrieves the current status of the download process.
@@ -158,5 +146,35 @@ void download_setFilepath(const char *path);
  * @return A pointer to a download_url_components_t structure.
  */
 const download_url_components_t *download_getUrlComponents(void);
+
+/**
+ * @brief Sets the download source URL.
+ *
+ * @param url The URL string to set for downloading.
+ */
+void download_setUrl(const char *url);
+
+/**
+ * @brief Retrieves the currently set download source URL.
+ *
+ * @return The current URL string.
+ */
+const char *download_getUrl(void);
+
+/**
+ * @brief Sets the destination folder for the download.
+ *
+ * @param folder The folder path where the file will be saved.
+ */
+void download_setDstFolder(const char *folder);
+
+/**
+ * @brief Retrieves the currently set destination folder.
+ *
+ * @return The current folder path.
+ */
+const char *download_getDstFolder(void);
+
+const char *download_getErrorString();
 
 #endif  // DOWNLOAD_H

@@ -71,10 +71,34 @@ set(CMAKE_C_STANDARD 11)
 # Creates a pico-sdk subdirectory in our project for the libraries
 pico_sdk_init()
 
+# Create the fsdata.c file
+set(MAKE_FS_DATA_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/external/makefsdata)
+
+# WARNING: I use a modified version of the makefsdata script to add text/css headers, not supported in the original tool
+if (NOT EXISTS ${MAKE_FS_DATA_SCRIPT})
+        file(DOWNLOAD
+                https://github.com/sidecartridge/lwip/blob/c476c83fd7fda8befd4fb3f99bac99cb2f31e9fd/src/apps/http/makefsdata/makefsdata
+                ${MAKE_FS_DATA_SCRIPT}
+                )
+endif()
+
+message(STATUS "Running makefsdata script")
+execute_process(COMMAND
+        perl ${MAKE_FS_DATA_SCRIPT}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        ECHO_OUTPUT_VARIABLE
+        ECHO_ERROR_VARIABLE
+        )
+file(REMOVE ${CMAKE_CURRENT_LIST_DIR}/fsdata_srv.c)
+file(RENAME ${CMAKE_CURRENT_LIST_DIR}/fsdata.c ${CMAKE_CURRENT_LIST_DIR}/fsdata_srv.c)
+
 add_subdirectory(settings)
 
 # Add u8g2 library
 add_subdirectory(u8g2)
+
+# Add qrcodegen library
+add_subdirectory(qrcodegen)
 
 # Add HTTP client library
 add_subdirectory(httpc)
@@ -94,16 +118,21 @@ target_sources(${PROJECT_NAME} PRIVATE
         blink.c
         display.c
         display_term.c
+        display_mngr.c
         download.c
-        emul.c
         gconfig.c
         hw_config.c
+        mbedtls_config.h
+        mngr.c
+        mngr_httpd.c
         network.c
         reset.c
         romemul.c
         sdcard.c
         select.c
-        term.c
+        usb_descriptors.c
+        usb_mass.c
+        tusb_config.h
         settings/settings.c)
 
 # Create map/bin/hex/uf2 files
@@ -114,10 +143,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${LINK_LIBRARIES}        # External or additional libraries passed as variables
     hardware_flash           # Flash memory access
     no-OS-FatFS-SD-SDIO-SPI-RPi-Pico                # FATFS library   
+    pico_lwip                # lwIP library
+    pico_lwip_http           # lwIP httpd library
+    pico_lwip_mbedtls        # lwIP mbedTLS library
+    pico_mbedtls             # mbedTLS library
+    pico_multicore           # Multicore support
     pico_stdlib              # Core functionality
-    pico_multicore          # Multicore support
     httpc                    # HTTP client
+    qrcodegen                # QR code generation library
     settings                 # Custom settings library
+    tinyusb_device           # USB mount
     u8g2                     # for display
 )
 
@@ -130,6 +165,11 @@ if (PICO_CYW43_SUPPORTED)
 else()
     message(WARNING "CYW43 architecture not supported")
 endif()
+
+# 🔑  Make sure our config directory is FIRST on the search list
+target_include_directories(${PROJECT_NAME} BEFORE PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/ff
+)
 
 # Link custom memmap with reserved memory for ROMs
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -182,7 +222,7 @@ if(NOT RELEASE_DATE)
 endif()
 
 if (NOT _DEBUG)
-        set(_DEBUG 1)
+        set(_DEBUG 0)
 endif()
 
 # Debug outputs
@@ -225,8 +265,8 @@ add_definitions(-DDISPLAY_ATARIST)
 # We don't modify the flash in Core 1
 add_definitions(-DPICO_FLASH_ASSUME_CORE0_SAFE=1)
 
-# Select HTTPS or HTTP downloads of the firmware
-add_definitions(-DAPP_DOWNLOAD_HTTPS=0)
+# Select HTTPS or HTTP downloads
+add_definitions(-DFMANAGER_DOWNLOAD_HTTPS=0)
 
 # Remove unused data
 target_link_options(${PROJECT_NAME} PRIVATE

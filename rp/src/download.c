@@ -12,16 +12,10 @@
 static FIL file;
 static download_status_t downloadStatus = DOWNLOAD_STATUS_IDLE;
 static HTTPC_REQUEST_T request = {0};
-static char filepath[DOWNLOAD_BUFFLINE_SIZE] = {0};
 static download_url_components_t components;
 static download_file_t fileUrl;
-
-// Generates a temporary file path for downloads.
-static void getTmpFilenamePath(char filename[DOWNLOAD_BUFFLINE_SIZE]) {
-  snprintf(
-      filename, DOWNLOAD_BUFFLINE_SIZE, "%s/tmp.download",
-      settings_find_entry(aconfig_getContext(), ACONFIG_PARAM_FOLDER)->value);
-}
+static char url[DOWNLOAD_BUFFLINE_SIZE] = {0};
+static char dst_folder[DOWNLOAD_BUFFLINE_SIZE] = {0};
 
 // Parses a URL into its components and extracts the file name.
 static int parseUrl(const char *url, download_url_components_t *components,
@@ -136,7 +130,7 @@ static err_t httpClientReceiveFileFn(__unused void *arg,
   }
 
   // Acknowledge that we received the data
-#if BOOSTER_DOWNLOAD_HTTPS == 1
+#if FMANAGER_DOWNLOAD_HTTPS == 1
   altcp_recved(conn, ptr->tot_len);
 #else
   tcp_recved(conn, ptr->tot_len);
@@ -208,17 +202,14 @@ download_err_t download_start() {
   // The binary is saved to the SD card
 
   // Get the components of a url
-  if (parseUrl(filepath, &components, &fileUrl) != 0) {
+  if (parseUrl(url, &components, &fileUrl) != 0) {
     DPRINTF("Error parsing URL\n");
     return DOWNLOAD_CANNOTPARSEURL_ERROR;
   }
 
-  // Open the file for writing to the folder of the apps to the tmp.download
-  // file
+  // Concatane in filename the folder and filename
   char filename[DOWNLOAD_BUFFLINE_SIZE] = {0};
-  getTmpFilenamePath(filename);
-  DPRINTF("Downloading to file: %s\n", filename);
-  FRESULT res;
+  snprintf(filename, sizeof(filename), "%s/%s", dst_folder, fileUrl.filename);
 
   // Close any previously open handle
   DPRINTF("Closing any previously open file\n");
@@ -230,7 +221,7 @@ download_err_t download_start() {
 
   // Open file for writing or create if it doesn't exist
   DPRINTF("Opening file for writing\n");
-  res = f_open(&file, filename, FA_WRITE | FA_CREATE_ALWAYS);
+  FRESULT res = f_open(&file, filename, FA_WRITE | FA_CREATE_ALWAYS);
   if (res == FR_LOCKED) {
     DPRINTF("File is locked. Attempting to resolve...\n");
 
@@ -257,7 +248,7 @@ download_err_t download_start() {
   request.recv_fn = httpClientReceiveFileFn;
   request.result_fn = httpClientResultCompleteFn;
   DPRINTF("Downloading: %s\n", request.url);
-#if APP_DOWNLOAD_HTTPS == 1
+#if FMANAGER_DOWNLOAD_HTTPS == 1
   request.tls_config = altcp_tls_create_config_client(NULL, 0);  // https
   DPRINTF("Download with HTTPS\n");
 #else
@@ -280,8 +271,10 @@ download_poll_t download_poll() {
     async_context_poll(cyw43_arch_async_context());
     async_context_wait_for_work_ms(cyw43_arch_async_context(),
                                    DOWNLOAD_POLLING_INTERVAL_MS);
+    downloadStatus = DOWNLOAD_STATUS_IN_PROGRESS;
     return DOWNLOAD_POLL_CONTINUE;
   }
+  downloadStatus = DOWNLOAD_STATUS_COMPLETED;
   return DOWNLOAD_POLL_COMPLETED;
 }
 
@@ -294,7 +287,7 @@ download_err_t download_finish() {
   }
   DPRINTF("Downloaded.\n");
 
-#if APP_DOWNLOAD_HTTPS == 1
+#if FMANAGER_DOWNLOAD_HTTPS == 1
   altcp_tls_free_config(request.tls_config);
 #endif
 
@@ -307,46 +300,60 @@ download_err_t download_finish() {
   return DOWNLOAD_OK;
 }
 
-download_err_t download_confirm() {
-  // Get the filename of
-  char fname[DOWNLOAD_BUFFLINE_SIZE] = {0};
-  snprintf(
-      fname, sizeof(fname), "%s/%s",
-      settings_find_entry(aconfig_getContext(), ACONFIG_PARAM_FOLDER)->value,
-      fileUrl.filename);
-
-  DPRINTF("Writing file %s\n", fname);
-
-  // Try to delete the file if they exist
-  f_unlink(fname);
-
-  // Now rename the tmp file to the final filename
-  char tmpFname[DOWNLOAD_BUFFLINE_SIZE] = {0};
-  snprintf(
-      tmpFname, sizeof(tmpFname), "%s/tmp.download",
-      settings_find_entry(aconfig_getContext(), ACONFIG_PARAM_FOLDER)->value);
-
-  // Rename the file to the final filename
-  FRESULT res = f_rename(tmpFname, fname);
-  if (res != FR_OK) {
-    DPRINTF("Error renaming file: %i\n", res);
-    return DOWNLOAD_CANNOTRENAMEFILE_ERROR;
-  }
-  DPRINTF("Written file %s\n", fname);
-  return DOWNLOAD_OK;
-}
-
 download_status_t download_getStatus() { return downloadStatus; }
 
 void download_setStatus(download_status_t status) { downloadStatus = status; }
 
-const char *download_getFilepath() { return filepath; }
-
-void download_setFilepath(const char *path) {
-  strncpy(filepath, path, sizeof(filepath) - 1);
-  filepath[sizeof(filepath) - 1] = '\0';
+// Add setter and getter for download URL and destination folder
+void download_setUrl(const char *u) {
+  strncpy(url, u, sizeof(url) - 1);
+  url[sizeof(url) - 1] = '\0';
 }
+
+const char *download_getUrl(void) { return url; }
+
+void download_setDstFolder(const char *d) {
+  strncpy(dst_folder, d, sizeof(dst_folder) - 1);
+  dst_folder[sizeof(dst_folder) - 1] = '\0';
+}
+
+const char *download_getDstFolder(void) { return dst_folder; }
 
 const download_url_components_t *download_getUrlComponents() {
   return &components;
+}
+
+const char *download_getErrorString() {
+  switch (downloadStatus) {
+    case DOWNLOAD_OK:
+      return "No error";
+    case DOWNLOAD_BASE64_ERROR:
+      return "Error decoding base64";
+    case DOWNLOAD_PARSEJSON_ERROR:
+      return "Error parsing JSON";
+    case DOWNLOAD_PARSEMD5_ERROR:
+      return "Error parsing MD5";
+    case DOWNLOAD_CANNOTOPENFILE_ERROR:
+      return "Cannot open file";
+    case DOWNLOAD_CANNOTCLOSEFILE_ERROR:
+      return "Cannot close file";
+    case DOWNLOAD_FORCEDABORT_ERROR:
+      return "Download aborted";
+    case DOWNLOAD_CANNOTSTARTDOWNLOAD_ERROR:
+      return "Cannot start download";
+    case DOWNLOAD_CANNOTREADFILE_ERROR:
+      return "Cannot read file";
+    case DOWNLOAD_CANNOTPARSEURL_ERROR:
+      return "Cannot parse URL";
+    case DOWNLOAD_MD5MISMATCH_ERROR:
+      return "MD5 mismatch";
+    case DOWNLOAD_CANNOTRENAMEFILE_ERROR:
+      return "Cannot rename file";
+    case DOWNLOAD_CANNOTCREATE_CONFIG:
+      return "Cannot create configuration";
+    case DOWNLOAD_CANNOTDELETECONFIGSECTOR_ERROR:
+      return "Cannot delete configuration sector";
+    default:
+      return "Unknown error";
+  }
 }

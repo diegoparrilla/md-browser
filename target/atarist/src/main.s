@@ -26,11 +26,17 @@
 ROM4_ADDR			equ $FA0000
 FRAMEBUFFER_ADDR	equ $FA8000
 FRAMEBUFFER_SIZE 	equ 8000	; 8Kbytes of a 320x200 monochrome screen
+SCREEN_SIZE			equ (-4096)	; Use the memory before the screen memory to store the copied code
 COLS_HIGH			equ 20		; 16 bit columns in the ST
 ROWS_HIGH			equ 200		; 200 rows in the ST
 BYTES_ROW_HIGH		equ 80		; 80 bytes per row in the ST
 PRE_RESET_WAIT		equ $FFFFF
 TRANSTABLE			equ $FA1000	; Translation table for high resolution
+
+; If 1, the display will not use the framebuffer and will write directly to the
+; display memory. This is useful to reduce the memory usage in the rp2040
+; When not using the framebuffer, the endianess swap must be done in the atari ST
+DISPLAY_BYPASS_FRAMEBUFFER 	equ 0
 
 CMD_NOP				equ 0		; No operation command
 CMD_RESET			equ 1		; Reset command
@@ -43,22 +49,25 @@ _conterm			equ $484	; Conterm device number
 
 ; Constants needed for the commands
 RANDOM_TOKEN_ADDR:        equ (ROM4_ADDR + $F000) 	      ; Random token address at $FAF000
-RANDOM_TOKEN_SEED_ADDR:   equ (RANDOM_TOKEN_ADDR + 4) 	  ; RANDOM_TOKEN_ADDR + 4 bytes
-RANDOM_TOKEN_POST_WAIT:   equ $1        		      	  ; Wait this cycles after the random number generator is ready
+RANDOM_TOKEN_SEED_ADDR    equ (RANDOM_TOKEN_ADDR + 4) 	  ; RANDOM_TOKEN_ADDR + 4 bytes
+RANDOM_TOKEN_POST_WAIT    equ $1                          ; Wait this cycles after the random number generator is ready
+COMMAND_TIMEOUT        	  equ $00000FFF ; Timeout for the simple command
+COMMAND_WRITE_TIMEOUT     equ $00001FFF ; Timeout for the command with large payload
 
 SHARED_VARIABLES:     	  equ (RANDOM_TOKEN_ADDR + (16 * 4)); random token + 16*4 bytes to the shared variables area
 
 ROMCMD_START_ADDR:        equ $FB0000					  ; We are going to use ROM3 address
 CMD_MAGIC_NUMBER    	  equ ($ABCD) 					  ; Magic number header to identify a command
+CMD_RETRIES_COUNT	  	  equ 3						  ; Number of retries for the command
 CMD_SET_SHARED_VAR		  equ 1							  ; This is a fake command to set the shared variables
 														  ; Used to store the system settings
 ; App commands for the terminal
 APP_TERMINAL 				equ $0 ; The terminal app
 
 ; App terminal commands
-APP_TERMINAL_START   		equ $0 ; Start terminal command
-APP_TERMINAL_KEYSTROKE 		equ $1 ; Keystroke command
+APP_BOOSTER_START   		equ $0 ; Start booster command
 
+_dskbufp                equ $4c6                            ; Address of the disk buffer pointer    
 
 
 	include inc/sidecart_macros.s
@@ -88,21 +97,6 @@ get_screen_base		macro
 					addq.l #2,sp
 					endm
 
-; Check the left or right shift key. If pressed, exit.
-check_shift_keys	macro
-					move.w #-1, -(sp)			; Read all key status
-					move.w #$b, -(sp)			; BIOS Get shift key status
-					trap #13
-					addq.l #4,sp
-
-					btst #1,d0					; Left shift skip and boot GEM
-					bne boot_gem
-
-					btst #0,d0					; Right shift skip and boot GEM
-					bne boot_gem
-
-					endm
-
 ; Check the keys pressed
 check_keys			macro
 
@@ -112,31 +106,35 @@ check_keys			macro
 
 					gemdos	Cnecin,2		; Read the key pressed
 
-					cmp.b #27, d0		; Check if the key is ESC
-					beq .\@esc_key	; If it is, send terminal command
-
-					move.l d0, d3
-					send_sync APP_TERMINAL_KEYSTROKE, 4
-
-					bra .\@no_key
+					cmp.b #27, d0			; Check if the key is ESC
+					bne .\@any_key
 .\@esc_key:
-					send_sync APP_TERMINAL_START, 0
+					send_sync APP_BOOSTER_START, 0
+					bra .\@no_key
 
+.\@any_key:			bra boot_gem			; If any key is pressed, boot GEM
+
+					; If we are here, no key was pressed
 .\@no_key:
 
 					endm
 
 check_commands		macro
 					move.l (FRAMEBUFFER_ADDR + FRAMEBUFFER_SIZE), d6	; Store in the D6 register the remote command value
+					cmp.l #CMD_TERMINAL, d6		; Check if the command is a terminal command
+					bne.s .\@check_reset
+
+					; Check the keys for the terminal emulation
+					check_keys
+					bra .\@bypass
+.\@check_reset:
 					cmp.l #CMD_RESET, d6		; Check if the command is a reset
 					beq .reset					; If it is, reset the computer
 					cmp.l #CMD_BOOT_GEM, d6		; Check if the command is to boot GEM
 					beq boot_gem				; If it is, boot GEM
-					cmp.l #CMD_START, d6		; Check if the command is to continue booting
-					beq rom_function			; If it is, continue booting with the emulation
 
 					; If we are here, the command is a NOP
-					; If the command is a NOP, check the keys to send terminal commands
+					; If the command is a NOP, check the shift keys to bypass the command
 					check_keys
 .\@bypass:
 					endm
@@ -160,14 +158,34 @@ first:
     even
 
 pre_auto:
+; Disable the MegaSTE cache and 16Mhz
+    jsr set_8mhz_megaste
+
 ; Get the screen memory address to display
 	get_screen_base
+	move.l d0, a2
+
+	lea SCREEN_SIZE(a2), a2		; Move to the end of the screen memory
+	move.l a2, a3				; Save the screen memory address in A3
+	; Copy the code out of the ROM to avoid unstable behavior
+    move.l #end_rom_code - start_rom_code, d6
+    lea start_rom_code, a1    ; a1 points to the start of the code in ROM
+    lsr.w #2, d6
+    subq #1, d6
+.copy_rom_code:
+    move.l (a1)+, (a2)+
+    dbf d6, .copy_rom_code
+	jmp (a3)
+
+start_rom_code:
+; We assume the screen memory address is in D0 after the get_screen_base call
 	move.l d0, a6				; Save the screen memory address in A6
 
 ; Enable bconin to return shift key status
 	or.b #%1000, _conterm.w
 
 ; Get the resolution of the screen
+.get_resolution:
 	get_rez
 	cmp.w #2, d0				; Check if the resolution is 640x400 (high resolution)
 	beq .print_loop_high		; If it is, print the message in high resolution
@@ -181,6 +199,9 @@ pre_auto:
 	move.l #((FRAMEBUFFER_SIZE / 2) -1), d0			; Set the number of words to copy
 .copy_screen_low:
 	move.w (a1)+ , d1			; Copy a word from the cartridge ROM
+	ifne DISPLAY_BYPASS_FRAMEBUFFER == 1
+	rol.w #8, d1				; swap high and low bytes
+	endif
 	move.w d1, d2				; Copy the word to d2
 	swap d2						; Swap the bytes
 	move.w d1, d2				; Copy the word to d2
@@ -207,6 +228,11 @@ pre_auto:
 	move.l #(COLS_HIGH -1), d1	; Set the number of columns to copy - 1 
 .copy_screen_col_high:
 	move.w (a0)+ , d2			; Copy a word from the cartridge ROM
+
+	ifne DISPLAY_BYPASS_FRAMEBUFFER == 1
+	rol.w #8, d2				; swap high and low bytes
+	endif
+
 	move.w d2, d3				; Copy the word to d3
 	and.w #$FF00, d3			; Mask the high byte
 	lsr.w #7, d3				; Shift the high byte 7 bits to the right
@@ -233,21 +259,6 @@ pre_auto:
 	bra .print_loop_high		; Continue printing the message
 	
 .reset:
-	; Copy the reset code out of the ROM because it is going to dissapear!
-    move.l #.end_reset_code_in_stack - .start_reset_code_in_stack, d6
-    lea -(.end_reset_code_in_stack - .start_reset_code_in_stack)(sp), sp
-    move.l sp, a2
-    move.l sp, a3
-    lea .start_reset_code_in_stack, a1    ; a1 points to the start of the code in ROM
-    lsr.w #2, d6
-    subq #1, d6
-.copy_reset_code:
-    move.l (a1)+, (a2)+
-    dbf d6, .copy_reset_code
-	jmp (a3)
-
-	even
-.start_reset_code_in_stack:
     move.l #PRE_RESET_WAIT, d6
 .wait_me:
     subq.l #1, d6           ; Decrement the outer loop
@@ -272,6 +283,8 @@ rom_function:
 ; Don't forget to include the macros for the shared functions at the top of file
     include "inc/sidecart_functions.s"
 
+
+end_rom_code:
 end_pre_auto:
 	even
 	dc.l 0

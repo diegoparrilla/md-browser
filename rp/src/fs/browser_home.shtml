@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <!-- Important for mobile: ensures responsive scaling -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:;base64,=">
+  <title><!--#TITLEHDR--></title>
+
+  <!-- Pure.css (CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
+    integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous" />
+  <!-- Grid responsiveness (sm, md, lg classes) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/grids-responsive-min.css" />
+  <link rel="stylesheet" href="styles.css?v=1.0" />
+
+  <!-- Font Awesome for icons (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+
+
+  <script>
+    function appManager() {
+      return {
+        // Folder browser state
+        folderBrowserOpen: false,
+        currentFolder: '/',
+        folderList: [],
+        selectedFile: '',
+        baseDownloadUrl: 'http://ataristdb.sidecartridge.com/',
+        initialized: false,
+        parsedEntries: [],
+        loaded: false,
+        currentLetter: '',
+        itemsCount: 0,
+        totalLetters: 0,
+        search: '',
+        labels: [],       // unique labels for combo box
+        selectedLabel: '', // filter by this label
+        showNew: false,    // only show newest entries when checked
+        // returns entries matching the search query
+        filteredEntries() {
+          const q = this.search.toLowerCase();
+          let list = this.parsedEntries.filter(e => {
+            if (!e.name.toLowerCase().startsWith(q)) return false;
+            if (this.selectedLabel && e.label !== this.selectedLabel) return false;
+            return true;
+          });
+          if (this.showNew) {
+            list = list.filter(e => e.time);
+            list.sort((a, b) => Number(b.time) - Number(a.time));
+          }
+          return list;
+        },
+
+        init() {
+          if (this.initialized) return;
+          this.initialized = true;
+          this.loadFiles();
+        },
+        async loadFiles() {
+          const baseUrl = this.baseDownloadUrl + 'db/';
+          const letters = 'abcdefghijklmnopqrstuvwxyz0123456789_';
+          // reset progress state
+          this.parsedEntries = [];
+          this.itemsCount = 0;
+          this.loaded = false;
+          this.totalLetters = letters.length;
+
+          for (const ch of letters) {
+            this.currentLetter = ch;
+            try {
+              const res = await fetch(`${baseUrl}${ch}.csv`);
+              if (res.ok) {
+                const txt = await res.text();
+                const lines = txt.split('\n').filter(l => l.trim());
+                for (const line of lines) {
+                  const parts = line.split(';');
+                  if (parts.length === 6) {
+                    // remove carriage returns, trim whitespace, then strip surrounding quotes
+                    const cleaned = parts.map(s => s.replace(/\r/g, '').trim().replace(/^"|"$/g, ''));
+                    const [f1, , f3, , f5, f6] = cleaned;
+                    const entry = { name: f1, time: f3 || null, label: f5, path: f6 };
+                    if (this.currentLetter === '_') {
+                      // only dedupe for underscore file
+                      if (!this.parsedEntries.some(e => e.name === entry.name && e.time === entry.time && e.label === entry.label && e.path === entry.path)) {
+                        this.parsedEntries.push(entry);
+                        this.itemsCount = this.parsedEntries.length;
+                      }
+                    } else {
+                      this.parsedEntries.push(entry);
+                      this.itemsCount = this.parsedEntries.length;
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore missing or inaccessible files
+            }
+          }
+          this.currentLetter = '';
+          // collect unique labels
+          const set = new Set(this.parsedEntries.map(e => e.label));
+          this.labels = Array.from(set).sort();
+          this.loaded = true;
+        }
+        ,
+        // Load folders under currentFolder
+        async loadFolders() {
+          try {
+            const res = await fetch(`/folder.cgi?folder=${encodeURIComponent(this.currentFolder)}`);
+            let list = [];
+            if (res.ok) {
+              list = await res.json();
+            }
+            this.folderList = list;
+            // add parent link if not root, always
+            if (this.currentFolder !== '/') {
+              this.folderList.unshift('..');
+            }
+          } catch (e) {
+            this.folderList = [];
+          }
+        },
+        // Open browser for a given start folder
+        openBrowser(filePath) {
+          this.selectedFile = filePath;
+          this.currentFolder = '/';
+          this.folderBrowserOpen = true;
+          this.loadFolders();
+        },
+        // Navigate into a folder or up
+        async changeFolder(name) {
+          if (name === '..') {
+            // move up one level
+            const parts = this.currentFolder.replace(/\/$/, '').split('/');
+            parts.pop();
+            const newPath = parts.join('/');
+            this.currentFolder = newPath ? newPath : '/';
+          } else {
+            this.currentFolder = this.currentFolder.replace(/\/$/, '') + '/' + name;
+          }
+          await this.loadFolders();
+        },
+        closeBrowser() {
+          this.folderBrowserOpen = false;
+          this.folderList = [];
+        }
+      };
+    }
+  </script>
+
+
+</head>
+
+<body x-data="appManager()" x-init="init()">
+  <!-- Green Banner Header -->
+  <header class="header">
+    <h1><!--#TITLEHDR--></h1>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="nav-bar">
+    <div class="pure-menu pure-menu-horizontal">
+      <ul class="pure-menu-list">
+        <li class="pure-menu-item pure-menu-selected">
+          <a href="#" class="pure-menu-link">Floppy DB</a>
+        </li>
+        <li class="pure-menu-item">
+          <a href="/fmanager_home.shtml" class="pure-menu-link">File Manager</a>
+        </li>
+        <li class="pure-menu-item">
+          <a href="https://docs.sidecartridge.com/sidecartridge-multidevice/#do-you-want-to-test-the-new-alpha-firmware"
+            target="_blank" class="pure-menu-link">Help</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <h2>Floppy Image database</h2>
+    <p>
+      Please type the name of the application you want to find in the database. The database will be filtered to show
+      only the applications that match your search.
+    </p>
+    <p>
+      To download the application, click on the link and confirm the folder to download before proceeding with the
+      download.
+    </p>
+    <!-- SD card found. Display search results -->
+    <div x-show="<!--#SDCARDB--> === true">
+      <div x-show="!loaded" class="loading-status">
+        <p>Loading... items loaded: <strong><span x-text="itemsCount"></span></strong></p>
+      </div>
+      <div x-show="loaded" class="file-contents">
+        <div class="filter-controls">
+          <input type="text" x-model="search" placeholder="Type the application name to find..."
+            title="Type the application name to find" class="pure-input-1" />
+          <select x-model="selectedLabel" class="pure-input-1">
+            <option value="">Filter by label</option>
+            <template x-for="lbl in labels" :key="lbl">
+              <option :value="lbl" x-text="lbl"></option>
+            </template>
+          </select>
+          <label class="pure-checkbox" style="display: flex; align-items: center;">
+            <input type="checkbox" x-model="showNew" />
+            <span style="margin-left: 0.5rem;">What's new</span>
+          </label>
+        </div>
+        <template x-if="search || selectedLabel || showNew">
+          <div class="search-results">
+            <template x-for="(entry, idx) in filteredEntries()" :key="idx">
+              <div class="entry">
+                <div class="entry-header" style="display: flex; align-items: center; gap: 0.5rem;">
+                  <h4 x-text="entry.name"></h4>
+                  <ul class="app-tags">
+                    <template x-if="entry.label">
+                      <li x-text="entry.label"></li>
+                    </template>
+                  </ul>
+                </div>
+                <p x-show="entry.time"><strong>Added:</strong> <span
+                    x-text="new Date(Number(entry.time) * 1000).toLocaleString()"></span></p>
+                <div class="entry-action" style="text-align: right;">
+                  <button type="button" class="pure-button" @click="openBrowser(entry.path)">Save To...</button>
+                </div>
+              </div>
+            </template>
+            <p x-show="filteredEntries().length === 0">No matching entries.</p>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- No SD card found. -->
+    <div x-show="<!--#SDCARDB--> === false" class="banner banner-error">
+      <i class="fas fa-exclamation-circle banner-icon"></i><!-- Error Icon -->
+      <span>We couldn't detect a functional microSD card in the SD card slot. Please ensure you're using a microSD card
+        formatted in exFAT or FAT32 and compatible with SDHC, SDXC, or SDUC standards. Once your card is ready, insert
+        it and reset the device to try again.</span>
+      <button class="banner-close" aria-label="Close">
+        &times;
+      </button>
+    </div>
+
+  </main>
+  <!-- Folder Browser Modal -->
+  <div x-show="folderBrowserOpen" x-cloak class="modal">
+    <div class="modal-overlay" @click="closeBrowser()"></div>
+    <div class="modal-content">
+      <h3>Select Destination Folder</h3>
+      <p><strong>Current:</strong> <span x-text="currentFolder"></span></p>
+      <ul class="folder-list">
+        <template x-for="f in folderList" :key="f">
+          <li>
+            <button type="button" class="pure-button" @click="changeFolder(f)">
+              <span x-text="f"></span>
+            </button>
+          </li>
+        </template>
+      </ul>
+      <form class="pure-form" action="/download.cgi" method="GET">
+        <input type="hidden" name="folder" :value="currentFolder" />
+        <input type="hidden" name="url" :value="baseDownloadUrl + selectedFile" />
+        <button type="submit" class="pure-button pure-button-primary">Download Here</button>
+        <button type="button" class="pure-button" @click="closeBrowser()">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer information in-page -->
+  <footer class="footer">
+    <p>&copy; 2025 GOODDATA LABS SLU. All rights reserved.</p>
+  </footer>
+
+</body>
+
+</html>

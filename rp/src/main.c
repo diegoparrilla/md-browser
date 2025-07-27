@@ -9,9 +9,10 @@
 #include "aconfig.h"
 #include "constants.h"
 #include "debug.h"
-#include "emul.h"
 #include "gconfig.h"
+#include "mngr.h"
 #include "reset.h"
+#include "target_firmware.h"
 
 // This is the main.c file for the app or microfirmware. It is the entry point
 // for the application. It is the first file that is executed when the
@@ -130,6 +131,24 @@ int main() {
       break;
   }
 
+  // As a rule of thumb, the remote device (the computer) driver code must
+  // be copied to the RAM of the host device where the emulation will take
+  // place.
+  // The code is stored as an array in the target_firmware.h file
+  //
+  // Copy the terminal firmware to RAM
+  COPY_FIRMWARE_TO_RAM((uint16_t *)target_firmware, target_firmware_length);
+
+  // Initialize the terminal emulator PIO programs
+  // The communication between the remote (target) computer and the RP2040
+  // is done using a command protocol over the cartridge bus
+  // term_dma_irq_handler_lookup is the implementation of the terminal
+  // emulator using the command protocol. Hence, if you want to implement
+  // your own app or microfirmware, you should implement your own command
+  // handler using this protocol.
+  init_romemul(NULL, mngr_dma_irq_handler_lookup, false);
+
   // Start the application
-  emul_start();
+  mngr_init();
+  mngr_loop();
 }

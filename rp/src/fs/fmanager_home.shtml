@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <!-- Important for mobile: ensures responsive scaling -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:;base64,=">
+  <title><!--#TITLEHDR--></title>
+
+  <!-- Pure.css (CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css"
+    integrity="sha384-X38yfunGUhNzHpBaEBsWLO+A0HDYOQi8ufWDkZ0k9e0eXz/tH3II7uKZ9msv++Ls" crossorigin="anonymous" />
+  <!-- Grid responsiveness (sm, md, lg classes) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/grids-responsive-min.css" />
+  <link rel="stylesheet" href="styles.css?v=1.0" />
+
+  <!-- Font Awesome for icons (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script>
+    function fileManager() {
+      return {
+        // Current folder path
+        folder: '/',
+        // Upload in progress flag
+        uploading: false,
+        // Default sort: by name ascending
+        sortKey: 'n',
+        sortAsc: true,
+        // Download in progress flag
+        downloading: false,
+        // Download progress percentage
+        downloadProgress: 0,
+        // Name of file being downloaded
+        downloadName: '',
+        load(offset = 0) {
+          const url = `/ls.cgi?folder=${encodeURIComponent(this.folder)}` + (offset ? `&nextItem=${offset}` : '');
+          fetch(url)
+            .then(res => res.ok ? res.json() : [])
+            .then(data => {
+              let more = false;
+              // Check for sentinel empty object indicating more data
+              if (data.length && Object.keys(data[data.length - 1]).length === 0) {
+                more = true;
+                data.pop();
+              }
+              if (offset === 0) this.items = [];
+              this.items = this.items.concat(data);
+              if (more) this.load(offset + data.length);
+            })
+            .catch(() => {
+              if (offset === 0) this.items = [];
+            });
+        },
+        // Initialize by clearing and loading from offset 0
+        init() {
+          this.items = [];
+          this.load(0);
+        },
+        toggleSort(key) {
+          if (this.sortKey === key) this.sortAsc = !this.sortAsc;
+          else { this.sortKey = key; this.sortAsc = true; }
+        },
+        itemsSorted() {
+          // Sort all entries and then separate directories and files
+          const arr = [...this.items].sort((a, b) => {
+            let av = a[this.sortKey], bv = b[this.sortKey];
+            // Compare as strings for name and timestamp
+            if (this.sortKey === 'n' || this.sortKey === 't') {
+              av = String(av).toLowerCase(); bv = String(bv).toLowerCase();
+            }
+            if (av < bv) return this.sortAsc ? -1 : 1;
+            if (av > bv) return this.sortAsc ? 1 : -1;
+            return 0;
+          });
+          // Directories first
+          const dirs = arr.filter(item => item.a & 0x10);
+          const files = arr.filter(item => !(item.a & 0x10));
+          return dirs.concat(files);
+        },
+        formatAttr(attr) {
+          const flags = [];
+          if (attr & 0x10) flags.push('D'); // Directory
+          if (attr & 0x01) flags.push('R'); // Read-only
+          if (attr & 0x02) flags.push('H'); // Hidden
+          return flags.join('');
+        },
+        formatTs(ts) {
+          const date = ts >> 16;
+          const time = ts & 0xFFFF;
+          const year = ((date >> 9) & 0x7F) + 1980;
+          const monthIdx = ((date >> 5) & 0x0F) - 1;
+          const day = date & 0x1F;
+          const hours = (time >> 11) & 0x1F;
+          const minutes = (time >> 5) & 0x3F;
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const mo = months[monthIdx] || '??';
+          const dd = String(day).padStart(2, ' ');
+          const hh = String(hours).padStart(2, '0');
+          const mm = String(minutes).padStart(2, '0');
+          return `${mo} ${dd} ${hh}:${mm}`;
+        },
+        navigate(name) {
+          if (name === '..') {
+            const parts = this.folder.replace(/\/$/, '').split('/');
+            parts.pop();
+            const newFolder = parts.join('/');
+            this.folder = newFolder || '/';
+          } else {
+            this.folder = this.folder.replace(/\/$/, '') + '/' + name;
+          }
+          this.load();
+        },
+        // Handler for multiple file upload
+        uploadFiles(event) {
+          const files = event.target.files;
+          if (!files || files.length === 0) return;
+          this.uploads = Array.from(files).map(f => ({ file: f, name: f.name, progress: 0, token: null }));
+          this.uploading = true;
+          this._uploadNext(0);
+        },
+        async _uploadNext(index) {
+          if (index >= this.uploads.length) {
+            this.uploading = false;
+            this.load(0);
+            return;
+          }
+          const entry = this.uploads[index];
+          const file = entry.file;
+          const token = Math.random().toString(36).substr(2, 9);
+          entry.token = token;
+          const fullpath = this.folder.replace(/\/$/, '') + '/' + file.name;
+          // Start upload
+          let res = await fetch(`/upload_start.cgi?token=${encodeURIComponent(token)}` +
+            `&fullpath=${encodeURIComponent(fullpath)}`);
+          let result = await res.json();
+          // record preferred upload method
+          this.uploadMethod = result.method || 'GET';
+          if (result.error) { alert('Upload start failed: ' + result.error); this.uploading = false; return; }
+          const chunkSize = result.chunkSize || 512;
+          const totalChunks = Math.ceil(file.size / chunkSize);
+          for (let i = 0; i < totalChunks; i++) {
+            const blob = file.slice(i * chunkSize, (i + 1) * chunkSize);
+            if (this.uploadMethod === 'POST') {
+              // send raw binary POST
+              await fetch(`/upload_chunk.cgi?token=${encodeURIComponent(token)}` +
+                `&chunk=${i}`, {
+                method: 'POST',
+                body: blob
+              });
+            } else {
+              const buffer = await blob.arrayBuffer();
+              let binary = '';
+              new Uint8Array(buffer).forEach(b => binary += String.fromCharCode(b));
+              const b64 = btoa(binary);
+              // Upload chunk
+              res = await fetch(`/upload_chunk.cgi?token=${encodeURIComponent(token)}` +
+                `&chunk=${i}&payload=${encodeURIComponent(b64)}`);
+              result = await res.json();
+            }
+            if (result.error) { alert(`Chunk ${i} failed: ` + result.error); this.uploading = false; return; }
+            entry.progress = ((i + 1) / totalChunks) * 100;
+          }
+          // Finish
+          res = await fetch(`/upload_end.cgi?token=${encodeURIComponent(token)}`);
+          result = await res.json();
+          if (result.error) { alert('Upload end failed: ' + result.error); this.uploading = false; return; }
+          entry.progress = 100;
+          // Next file
+          this._uploadNext(index + 1);
+        },
+        cancelAll() {
+          // cancel current upload
+          const current = this.uploads.find(u => u.token);
+          if (current && current.token) fetch(`/upload_cancel.cgi?token=${encodeURIComponent(current.token)}`);
+          this.uploading = false;
+          this.uploads = [];
+        },
+        // Handler to delete a file or folder directly from list; shift-click skips confirmation
+        deleteItem(item, ev) {
+          const skipConfirm = ev && ev.shiftKey;
+          if (!skipConfirm && !confirm('Delete ' + item.n + '?')) {
+            return;
+          }
+          fetch(`/del.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(item.n)}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Delete failed: ' + r.error);
+              else this.load(0);
+            });
+        },
+        // Inline rename handler for list rows
+        renameItem(item) {
+          const newName = prompt('New name for ' + item.n, item.n);
+          if (!newName || newName === item.n) return;
+          fetch(`/ren.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(item.n)}` +
+            `&dst=${encodeURIComponent(newName)}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Rename failed: ' + r.error);
+              else this.load(0);
+            });
+        },
+        // Handler for URL-based upload: redirect to download CGI with params
+        uploadUrl() {
+          const fileUrl = prompt('Enter file URL to upload:');
+          if (fileUrl) {
+            const target = `/download.cgi?folder=${encodeURIComponent(this.folder)}` +
+              `&url=${encodeURIComponent(fileUrl)}`;
+            window.location.href = target;
+          }
+        },
+        // Handler to cancel an ongoing upload
+        cancelUpload() {
+          if (this.uploading && this.uploadToken) {
+            fetch(`/upload_cancel.cgi?token=${encodeURIComponent(this.uploadToken)}`);
+            this.uploading = false;
+            this.uploadToken = null;
+            alert('Upload cancelled');
+          }
+        },
+        showDetails(item) {
+          this.detailFile = item;
+          this.detailVisible = true;
+        },
+        closeDetails() {
+          this.detailVisible = false;
+          this.detailFile = {};
+        },
+        renameFile() {
+          const newName = prompt('New name for ' + this.detailFile.n, this.detailFile.n);
+          if (!newName || newName === this.detailFile.n) return;
+          fetch(`/ren.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(this.detailFile.n)}` +
+            `&dst=${encodeURIComponent(newName)}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Rename failed: ' + r.error);
+              else {
+                this.closeDetails(); this.load(0);
+              }
+            });
+        },
+        deleteFile() {
+          if (!confirm('Delete ' + this.detailFile.n + '?')) return;
+          fetch(`/del.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(this.detailFile.n)}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Delete failed: ' + r.error);
+              else { this.closeDetails(); this.load(0); }
+            });
+        },
+        // Handler to download a file in chunks and assemble for user download
+        async downloadFile() {
+          // Initialize download progress
+          this.downloading = true;
+          this.downloadProgress = 0;
+          this.downloadName = this.detailFile.n;
+          const token = Math.random().toString(36).substr(2, 9);
+          const path = this.folder.replace(/\/$/, '') + '/' + this.detailFile.n;
+          // Start download
+          let res = await fetch(`/download_start.cgi?token=${encodeURIComponent(token)}` +
+            `&fullpath=${encodeURIComponent(path)}`);
+          let info = await res.json();
+          if (info.error) { alert('Download start failed: ' + info.error); this.downloading = false; return; }
+          const chunkSize = info.chunkSize || 1024;
+          const totalChunks = Math.ceil(info.fileSize / chunkSize);
+          const buffers = [];
+          for (let i = 0; i < totalChunks; i++) {
+            let r2 = await fetch(`/download_chunk.cgi?token=${encodeURIComponent(token)}&chunk=${i}`);
+            let part = await r2.json();
+            if (part.error) { alert(`Chunk ${i} failed: ` + part.error); this.downloading = false; return; }
+            const bin = atob(part.data);
+            const arr = new Uint8Array(bin.length);
+            for (let j = 0; j < bin.length; j++) arr[j] = bin.charCodeAt(j);
+            buffers.push(arr);
+            // Update download progress
+            this.downloadProgress = Math.round(((i + 1) / totalChunks) * 100);
+          }
+          // End download
+          await fetch(`/download_end.cgi?token=${encodeURIComponent(token)}`);
+          // Hide progress modal
+          this.downloading = false;
+          // Assemble and trigger
+          const blob = new Blob(buffers, { type: 'application/octet-stream' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = this.detailFile.n;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        },
+        // Create new folder in current directory
+        createFolder() {
+          const name = prompt('New folder name:');
+          if (!name) return;
+          fetch(`/mkdir.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Create folder failed: ' + r.error);
+              else this.load(0);
+            });
+        },
+        // Toggle hidden attribute while preserving read-only flag
+        toggleHidden() {
+          const current = this.detailFile.a;
+          const newHidden = (current & 0x02) ? 0 : 1;
+          const readonlyParam = (current & 0x01) ? 1 : 0;
+          fetch(`/attr.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(this.detailFile.n)}` +
+            `&hidden=${newHidden}&readonly=${readonlyParam}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Attribute update failed: ' + r.error);
+              else { this.closeDetails(); this.load(0); }
+            });
+        },
+        // Toggle read-only attribute while preserving hidden flag
+        toggleReadonly() {
+          const current = this.detailFile.a;
+          const newReadOnly = (current & 0x01) ? 0 : 1;
+          const hiddenParam = (current & 0x02) ? 1 : 0;
+          fetch(`/attr.cgi?folder=${encodeURIComponent(this.folder)}` +
+            `&src=${encodeURIComponent(this.detailFile.n)}` +
+            `&hidden=${hiddenParam}&readonly=${newReadOnly}`)
+            .then(res => res.json())
+            .then(r => {
+              if (r.error) alert('Attribute update failed: ' + r.error);
+              else { this.closeDetails(); this.load(0); }
+            });
+        },
+      };
+    }
+  </script>
+</head>
+
+<body x-data="fileManager()" x-init="init()">
+  <!-- Upload progress modal -->
+  <div x-show="uploading" class="upload-modal" x-cloak>
+    <div class="upload-modal-content">
+      <h3>Uploading Files</h3>
+      <ul style="list-style:none; padding:0; max-height:300px; overflow-y:auto;">
+        <template x-for="(entry,idx) in uploads" :key="idx">
+          <li style="margin-bottom:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span x-text="entry.name"></span>
+              <span x-text="Math.round(entry.progress) + '%'" style="margin-left:0.5rem;"></span>
+            </div>
+            <progress class="pure-progress" max="100" x-bind:value="entry.progress" style="width:100%;"></progress>
+          </li>
+        </template>
+      </ul>
+      <div style="margin-top:1rem; text-align:center;">
+        <button class="pure-button pure-button-error" @click="cancelAll()">Cancel All</button>
+      </div>
+    </div>
+  </div>
+  <!-- Download progress modal -->
+  <div x-show="downloading" class="upload-modal" x-cloak>
+    <div class="upload-modal-content">
+      <h3 x-text="`Downloading ${downloadName}`"></h3>
+      <div style="margin:1rem 0;">
+        <progress class="pure-progress" max="100" x-bind:value="downloadProgress" style="width:100%;"></progress>
+      </div>
+      <div style="margin-top:1rem; text-align:center;">
+        <button class="pure-button pure-button-error" @click="downloading=false">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <!-- File details modal -->
+  <div x-show="detailVisible" class="detail-modal" x-cloak>
+    <div class="detail-modal-content">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span class="tooltip" style="display:flex; align-items:center; gap:0.5rem;">
+          <i class="fas fa-file detail-icon"></i>
+          <h3 class="detail-filename" x-text="detailFile.n"></h3>
+          <span class="tooltip-text">File Name</span>
+        </span>
+      </div>
+      <p style="display:flex; align-items:center; gap:0.5rem;">
+        <span class="tooltip" style="display:flex; align-items:center; gap:0.5rem;">
+          <i class="fas fa-flag detail-icon"></i>
+          <span x-text="formatAttr(detailFile.a)"></span>
+          <span class="tooltip-text">Attributes</span>
+        </span>
+      </p>
+      <p style="display:flex; align-items:center; gap:0.5rem;">
+        <span class="tooltip" style="display:flex; align-items:center; gap:0.5rem;">
+          <i class="fas fa-balance-scale detail-icon"></i>
+          <span x-text="detailFile.s + ' bytes'"></span>
+          <span class="tooltip-text">Size</span>
+        </span>
+      </p>
+      <p style="display:flex; align-items:center; gap:0.5rem;">
+        <span class="tooltip" style="display:flex; align-items:center; gap:0.5rem;">
+          <i class="fas fa-clock detail-icon"></i>
+          <span x-text="new Date(detailFile.t * 1000).toLocaleString()"></span>
+          <span class="tooltip-text">Modified</span>
+        </span>
+      </p>
+      <div style="margin-top:1rem; display:flex; gap:0.5rem; justify-content:center;">
+        <!-- Toggle Hidden and Read-only -->
+        <button class="pure-button" @click="toggleHidden()">
+          <span x-text="(detailFile.a & 0x02) ? 'Unhide' : 'Hide'"></span>
+        </button>
+        <button class="pure-button" @click="toggleReadonly()">
+          <span x-text="(detailFile.a & 0x01) ? 'Writable' : 'Read-only'"></span>
+        </button>
+        <!-- File operations -->
+        <button class="pure-button pure-button-primary" @click="renameFile()">Rename</button>
+        <button class="pure-button pure-button-success" @click="downloadFile()">Download</button>
+        <button class="pure-button pure-button-danger" @click="deleteFile()">Delete</button>
+        <button class="pure-button" @click="closeDetails()">Close</button>
+      </div>
+    </div>
+  </div>
+  <!-- Download progress modal -->
+  <div x-show="downloading" class="download-modal" x-cloak>
+    <div class="download-modal-content">
+      <h3>Downloading File</h3>
+      <p x-text="'File: ' + downloadName"></p>
+      <progress class="pure-progress" max="100" x-bind:value="downloadProgress" style="width:100%;"></progress>
+      <div style="margin-top:1rem; text-align:center;">
+        <button class="pure-button pure-button-error" @click="cancelUpload()">Cancel Download</button>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <h1><!--#TITLEHDR--></h1>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="nav-bar">
+    <div class="pure-menu pure-menu-horizontal">
+      <ul class="pure-menu-list">
+        <li class="pure-menu-item">
+          <a href="/browser_home.shtml" class="pure-menu-link">Floppy DB</a>
+        </li>
+        <li class="pure-menu-item pure-menu-selected">
+          <a href="#" class="pure-menu-link">File Manager</a>
+        </li>
+        <li class="pure-menu-item">
+          <a href="https://docs.sidecartridge.com/sidecartridge-multidevice/#do-you-want-to-test-the-new-alpha-firmware"
+            target="_blank" class="pure-menu-link">Help</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <h2>File Manager</h2>
+    <!-- Breadcrumb and navigation -->
+    <p>Folder: <strong x-text="folder || '/' "></strong></p>
+    <div style="margin:1rem 0; display:flex; gap:0.5rem;">
+      <input type="file" x-ref="fileInput" style="display:none" multiple @change="uploadFiles($event)" />
+      <button class="pure-button pure-button-primary" @click="$refs.fileInput.click()">Upload Files</button>
+      <button class="pure-button" @click="uploadUrl()">Upload from URL</button>
+      <button class="pure-button" @click="createFolder()">New Folder</button>
+    </div>
+
+    <table class="pure-table pure-table-horizontal" style="margin-top:1rem; width:100%;">
+      <thead>
+        <tr>
+          <th @click="toggleSort('n')" :class="{sorted: sortKey==='n'}">Name</th>
+          <th @click="toggleSort('s')" :class="{sorted: sortKey==='s'}">Size</th>
+          <th @click="toggleSort('t')" :class="{sorted: sortKey==='t'}">Timestamp</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Go up row -->
+        <template x-if="folder !== '/'">
+          <tr class="clickable-row" @click="navigate('..')">
+            <td colspan="3"><i class="fas fa-level-up-alt"></i> ..</td>
+            <td></td>
+          </tr>
+        </template>
+        <template x-for="(item,idx) in itemsSorted()" :key="idx">
+          <tr class="clickable-row" :class="{'hidden-row': (item.a & 0x02), 'readonly-row': (item.a & 0x01)}"
+            @click="item.a & 0x10 ? navigate(item.n) : showDetails(item)">
+            <td>
+              <template x-if="item.a & 0x10">
+                <i class="fas fa-folder"></i>&nbsp;
+              </template>
+              <span x-text="item.n"></span>
+            </td>
+            <td x-text="item.s"></td>
+            <td x-text="formatTs(item.t)"></td>
+            <td>
+              <span class="action-icons">
+                <i class="fas fa-edit rename-icon" @click.stop="renameItem(item)"></i>
+                <i class="fas fa-trash delete-icon" title="Delete (Shift-click to skip confirmation)"
+                  @click.stop="deleteItem(item, $event)"></i>
+              </span>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+  </main>
+  <!-- Footer information in-page -->
+  <footer class="footer">
+    <p>&copy; 2025 GOODDATA LABS SLU. All rights reserved.</p>
+  </footer>
+
+</body>
+
+</html>

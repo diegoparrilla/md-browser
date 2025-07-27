@@ -129,8 +129,8 @@
 #define MBEDTLS_ASN1_WRITE_C  // for MBEDTLS_ECDSA_C
 
 // Debug
-// #define MBEDTLS_DEBUG_C                           // Debug functions
-// #define MBEDTLS_SSL_DEBUG_ALL                     // Debug output
+#define MBEDTLS_DEBUG_C        // Debug functions
+#define MBEDTLS_SSL_DEBUG_ALL  // Debug output
 
 // #define MBEDTLS_MPI_MAX_SIZE 256 // Default might be 512 or more
 

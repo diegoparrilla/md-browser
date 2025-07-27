@@ -1,0 +1,823 @@
+/* ---------- Global Reset / Basic Page Styling ---------- */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: #f4f4f9;
+  color: #333;
+  font-family: Arial, sans-serif;
+}
+
+/* Main container or content area that can grow/shrink */
+.main-content {
+  flex: 1;
+  /*    width: 100%; */
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.main-content-full-width {
+  flex: 1;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+
+
+/* ---------- Header (Blue Banner) ---------- */
+.header {
+  background-color: #008000;
+  /* Green background */
+  color: #fff;
+  padding: 1em;
+  text-align: center;
+}
+
+/* ---------- Navigation Bar ---------- */
+.nav-bar {
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1em;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  max-width: 800px;
+}
+
+.nav-bar .pure-menu-link {
+  color: #333;
+}
+
+/* Active/hover states */
+.nav-bar .pure-menu-selected .pure-menu-link,
+.nav-bar .pure-menu-link:hover {
+  background: #008000;
+  /* Green background */
+  color: #fff;
+}
+
+/* ---------- Responsive Menu (Pure) ---------- */
+@media (max-width: 600px) {
+  .pure-menu-horizontal {
+    display: block;
+  }
+
+  .pure-menu-horizontal .pure-menu-list {
+    display: block;
+    width: 100%;
+  }
+
+  .pure-menu-horizontal .pure-menu-item {
+    display: block;
+  }
+
+  .pure-menu-horizontal .pure-menu-link {
+    display: block;
+    border-bottom: 1px solid #eee;
+    padding: 0.75em 1em;
+  }
+}
+
+/* ---------- Main Content Container ---------- */
+.content {
+  margin-left: auto;
+  margin-right: auto;
+  width: 90%;
+  max-width: 800px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 1em;
+}
+
+/* ---------- Footer ---------- */
+.footer {
+  text-align: center;
+  font-size: 14px;
+  color: #777;
+  padding: 1em;
+  margin-top: auto;
+  /* push footer down if content is short */
+  width: 100%;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- System Section ---------- */
+.system-section {
+  margin-left: auto;
+  margin-right: auto;
+  width: 90%;
+  max-width: 800px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.system-section h2 {
+  margin-top: 0;
+  text-align: left;
+  color: #008000;
+}
+
+/* Remove default list styling */
+.system-list {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+/* 
+    Each .system-item:
+    - Takes full width on smaller screens
+    - Takes half width on `sm` or `md` breakpoints (whichever you use in HTML)
+  */
+.system-item {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #ddd;
+  /* optional divider */
+}
+
+/* Layout for label & value within each item */
+.item-inner {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  /* label ~ 180px, value fills rest */
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Icon + Label Container */
+.label-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.label-cell i {
+  color: #008000;
+  font-size: 1.2rem;
+}
+
+/* Value in a monospaced, bold font */
+.value-cell {
+  text-align: left;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+}
+
+.text-error {
+  color: red
+    /* Example error red */
+}
+
+
+.text-warning {
+  color: #ff9800;
+  /* Example warning orange */
+}
+
+.text-success {
+  color: #4caf50;
+  /* Example success green */
+}
+
+.text-info {
+  color: #2196f3;
+  /* Example info blue */
+}
+
+/* General Banner Styling */
+.banner {
+  padding: 1rem;
+  border-radius: 4px;
+  position: relative;
+  margin-bottom: 1rem;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Space between icon and text */
+}
+
+.banner-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+.banner-close:hover {
+  opacity: 0.8;
+  /* Subtle hover effect */
+}
+
+/* Specific Banner Types */
+.banner-error {
+  background-color: #fdecea;
+  /* Light red */
+  color: #b91c1c;
+  /* Dark red */
+  border-color: #fca5a5;
+  /* Medium red */
+}
+
+.banner-warning {
+  background-color: #fef3c7;
+  /* Light yellow */
+  color: #854d0e;
+  /* Dark gold */
+  border-color: #fcd34d;
+  /* Medium gold */
+}
+
+.banner-info {
+  background-color: #dbeafe;
+  /* Light blue */
+  color: #1e40af;
+  /* Dark blue */
+  border-color: #93c5fd;
+  /* Medium blue */
+}
+
+.banner-success {
+  background-color: #dcfce7;
+  /* Light green */
+  color: #065f46;
+  /* Dark green */
+  border-color: #6ee7b7;
+  /* Medium green */
+}
+
+/* Font Awesome Icon Styling */
+.banner-icon {
+  font-size: 1.5rem;
+  /* Larger icon size */
+  margin-right: 0.5rem;
+}
+
+/* App List Styling */
+.app-list {
+  padding: 0rem;
+  margin: 0rem;
+  width: 100%;
+}
+
+.app-row {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 1rem;
+  padding-top: 1rem;
+  width: 100%;
+  align-items: center;
+}
+
+.app-row:nth-child(odd) {
+  background-color: #ffffff;
+  /* White background for odd rows */
+}
+
+.app-image {
+  flex: 0 0 auto;
+  /* Fixed width for image container */
+  text-align: center;
+}
+
+.app-thumbnail {
+  width: 100%;
+  max-width: 256px;
+  height: auto;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+/* Middle: App Details */
+.app-details {
+  flex: 1 1 auto;
+  /* Flexible size for middle panel */
+  overflow: hidden;
+  /* Prevent overflow for long text */
+}
+
+.app-details h3 {
+  display: inline-block;
+  margin-left: 0rem;
+  margin-right: 1rem;
+  margin-top: 0.2rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.app-details h4 {
+  display: inline-block;
+  margin: 0;
+  font-size: 0.9rem;
+  color: #333;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+}
+
+
+.app-details p {
+  margin-top: 0;
+  margin-left: 0rem;
+  margin-right: 1rem;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+  color: #555;
+}
+
+.app-row.update-available {
+  background-color: #ffe6e6;
+  /* light red */
+}
+
+.tags-row {
+  display: flex;
+  /* Put both lists on one line */
+  flex-wrap: wrap;
+  /* Let them wrap if screen is too narrow */
+  padding-bottom: 1rem;
+}
+
+.tags-row ul {
+  margin: 0;
+  /* Remove extra margin so they line up */
+  padding: 0;
+  display: flex;
+  /* Keep each list’s items in a row */
+  gap: 0.25rem;
+  /* Spacing between each tag */
+}
+
+ul.app-tags {
+  list-style-type: none;
+  padding: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 0rem;
+  margin-right: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+ul.app-tags li {
+  background: #D0D0D0;
+  color: #333;
+  padding: 0.25rem 0.25rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+ul.device-tags {
+  list-style-type: none;
+  padding: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 0.5rem;
+  margin-right: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+ul.device-tags li {
+  background: #e57373;
+  color: white;
+  padding: 0.25rem 0.25rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+/* Right-hand side: Buttons */
+.app-actions {
+  flex: 0 0 auto;
+  /* Fixed size for button container */
+  display: flex;
+  flex-direction: column;
+  /* Stack buttons vertically */
+  gap: 0.5rem;
+  justify-content: center;
+  /* or center, space-between, etc. */
+  align-items: flex-start;
+  /* how to align horizontally */
+}
+
+.app-actions .pure-button {
+  width: 100%;
+}
+
+.app-actions .button-delete {
+  background-color: #e57373;
+  color: white;
+}
+
+.app-actions .button-delete:hover {
+  background-color: #c62828;
+}
+
+[x-cloak] {
+  display: none !important;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  position: relative;
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  width: 90%;
+  z-index: 1001;
+}
+
+/* Folder list container: white background and smooth touch scrolling */
+.folder-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: #fff;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Each folder row with transparent gap above and below */
+.folder-list li {
+  margin: 2px 0;
+}
+
+.folder-list li:last-child {
+  margin-bottom: 0;
+}
+
+.folder-list li button {
+  display: block;
+  width: 100%;
+  background-color: #eee;
+  border: none;
+  text-align: left;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px;
+}
+
+.modal[x-show="showDeleteModal"] {
+  display: flex;
+}
+
+.modal[x-show="showLaunchModal"] {
+  display: flex;
+}
+
+.modal[x-show="showInfoModal"] {
+  display: flex;
+}
+
+.modal[x-show="showErrorModal"] {
+  display: flex;
+}
+
+.modal[x-show="showConfirmationModal"] {
+  display: flex;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.modal-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #fff;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 1001;
+  max-width: 90%;
+  width: 400px;
+}
+
+.modal-buttons {
+  margin-top: 1.5rem;
+  text-align: right;
+}
+
+.modal-buttons .pure-button+.pure-button {
+  margin-left: 0.5rem;
+}
+
+/* Modal Information Icon */
+.modal-info-icon {
+  color: #008000;
+  /* Green tone matching the existing icons */
+  font-size: 2rem;
+  /* Larger size for emphasis */
+  margin-right: 1rem;
+  /* Space between icon and text */
+}
+
+/* Modal Error Icon */
+.modal-error-icon {
+  color: #b91c1c;
+  /* Red tone matching the existing error color */
+  font-size: 2rem;
+  /* Larger size for emphasis */
+  margin-right: 1rem;
+  /* Space between icon and text */
+}
+
+/* Spinner Styles */
+.spinner {
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 10px;
+  display: block;
+}
+
+/* Table row hover effect */
+table.pure-table.pure-table-bordered tbody tr:hover {
+  background-color: #e0ffe0;
+  /* Light green on hover */
+}
+
+.pure-button-warning {
+  background-color: #e57373;
+  /* Light red */
+  color: white;
+}
+
+.pure-button-warning:hover {
+  background-color: #c62828;
+  /* Dark red */
+}
+
+/* ---------- Filter Controls ---------- */
+.filter-controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.filter-controls input[type="text"],
+.filter-controls select {
+  padding: 0.5rem;
+  font-size: 1.1rem;
+  min-height: 2.5rem;
+}
+
+.filter-controls input[type="text"] {
+  flex: 2 1 0;
+}
+
+.filter-controls select {
+  flex: 1 1 0;
+}
+
+/* On very small screens, stack controls */
+@media (max-width: 600px) {
+  .filter-controls {
+    flex-direction: column;
+  }
+}
+
+/* ---------- Search Results ---------- */
+.search-results .entry {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.search-results .entry h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  color: #008000;
+}
+
+.search-results .entry p {
+  margin: 0.25rem 0;
+  color: #555;
+}
+
+/* File Manager Table Styles */
+/* Monospace font for file manager table */
+table.pure-table td,
+table.pure-table th {
+  font-family: monospace;
+}
+
+/* Highlight sorted column */
+th.sorted {
+  background: #e0e0e0;
+  cursor: pointer;
+}
+
+/* Hidden files appear greyed out */
+.hidden-row * {
+  color: #888 !important;
+}
+
+/* Read-only files appear in red */
+.readonly-row * {
+  color: red !important;
+}
+
+/* Clickable rows underline on hover */
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover td {
+  text-decoration: underline;
+}
+
+/* ---------- Upload Progress Modal ---------- */
+.upload-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* ensure above detail-modal */
+  z-index: 2000;
+}
+
+.upload-modal-content {
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  text-align: center;
+  min-width: 200px;
+}
+
+.upload-modal[ x-cloak] {
+  display: none;
+}
+
+/* ---------- Detail Modal ---------- */
+.detail-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2rem;
+  z-index: 1000;
+}
+
+.detail-modal-content {
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  text-align: left;
+  min-width: 300px;
+}
+
+.detail-modal[ x-cloak] {
+  display: none;
+}
+
+/* Monospace filename in detail modal */
+.detail-filename {
+  font-family: monospace;
+  margin-bottom: 1rem;
+}
+
+/* Danger button style for delete */
+.pure-button-danger {
+  background: #d9534f;
+  color: #fff;
+  border: 1px solid #d43f3a;
+}
+
+.pure-button-danger:hover {
+  background: #c9302c;
+}
+
+/* Icons in detail modal labels */
+.detail-icon {
+  margin-right: 0.5rem;
+  width: 1rem;
+  text-align: center;
+}
+
+/* List delete icon */
+.delete-icon {
+  color: #d9534f;
+  cursor: pointer;
+}
+
+.delete-icon:hover {
+  color: #c9302c;
+}
+
+/* Wrapper ensuring inline horizontal alignment of rename/delete icons */
+.action-icons {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* prevent shrinking in table cell */
+}
+
+/* Ensure the icon column never wraps or shrinks below its content width */
+.pure-table td:last-child {
+  white-space: nowrap;
+  width: auto;
+  /* allow cell to shrink to icon width */
+}
+
+
+/* ---------- Custom Tooltip ---------- */
+.tooltip {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+
+.tooltip .tooltip-text {
+  visibility: hidden;
+  width: max-content;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  text-align: center;
+  border-radius: 4px;
+  padding: 4px 8px;
+  position: absolute;
+  z-index: 1001;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tooltip:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Prevent table cell content from wrapping */
+.no-wrap {
+  white-space: nowrap;
+}

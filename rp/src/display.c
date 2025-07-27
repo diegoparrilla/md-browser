@@ -149,8 +149,8 @@ void display_drawProductInfo() {
   // Product info
   char productStr[DISPLAY_MAX_CHARACTERS] = {0};
   u8g2_SetFont(&u8g2, u8g2_font_squeezed_b7_tr);
-  snprintf(productStr, sizeof(productStr), "%s %s - %s", DISPLAY_PRODUCT_MSG,
-           RELEASE_VERSION, DISPLAY_COPYRIGHT_MESSAGE);
+  snprintf(productStr, sizeof(productStr), "%s - %s", DISPLAY_PRODUCT_MSG,
+           DISPLAY_COPYRIGHT_MESSAGE);
   u8g2_DrawStr(
       &u8g2,
       LEFT_PADDING_FOR_CENTER(productStr, 68) * DISPLAY_NARROW_CHAR_WIDTH,
@@ -185,4 +185,73 @@ void display_scrollup(uint16_t blankBytes) {
   memmove(u8g2Buffer, u8g2Buffer + blankBytes,
           DISPLAY_BUFFER_SIZE - blankBytes);
   memset(u8g2Buffer + DISPLAY_BUFFER_SIZE - blankBytes, 0, blankBytes);
+}
+
+void display_drawQr(const uint8_t qrcode[], uint16_t display_size_x,
+                    uint16_t display_size_y, uint16_t pos_x, uint16_t pos_y,
+                    int border, int scale) {
+  // Get the display buffer address
+  uint8_t *display_address = u8g2Buffer;
+
+  // Get the native size of the QR code
+  int size = qrcodegen_getSize(qrcode);
+
+  // Clear or initialize the display buffer if needed (optional)
+  // Example: memset(display_address, 0, (display_size_x / 8) * display_size_y);
+
+  // Calculate total size in pixels (QR code modules + border) * scale
+  int total_size_in_pixels = (size + 2 * border) * scale;
+
+  // Loop through each pixel in the scaled QR code + border
+  // Note: y and x indices are in 'pixel' units, not 'modules'.
+  for (int y = 0; y < total_size_in_pixels; y++) {
+    for (int x = 0; x < total_size_in_pixels; x++) {
+      // Center the QR code by offsetting the position
+      // We subtract half of the total scaled size from the center of the
+      // display
+      int abs_x = pos_x + x + (display_size_x - total_size_in_pixels) / 2;
+      int abs_y = pos_y + y + (display_size_y - total_size_in_pixels) / 2;
+
+      // Ensure we are within display bounds
+      if (abs_x >= 0 && abs_x < (display_size_x + pos_x) && abs_y >= 0 &&
+          abs_y < (display_size_y + pos_y)) {
+        // Determine the tile (byte) and bit within the display buffer
+        int tile_x = abs_x / 8;
+        int bit = 7 - (abs_x % 8);
+        int address = (abs_y * (DISPLAY_WIDTH / 8)) + tile_x;
+
+        // Translate scaled/bordered pixel coordinates back to original QR
+        // modules: (x / scale) - border and (y / scale) - border will give us
+        // which original QR module this pixel belongs to.
+        int module_x = (x / scale) - border;
+        int module_y = (y / scale) - border;
+
+        // Check if we're within the QR code module area
+        bool is_within_qr = (module_x >= 0 && module_x < size) &&
+                            (module_y >= 0 && module_y < size);
+
+        // If within the original QR code area, get the module state
+        bool module_on = false;
+        if (is_within_qr) {
+          module_on = qrcodegen_getModule(qrcode, module_x, module_y);
+        }
+
+        // Set or clear the bit accordingly
+        if (module_on) {
+          display_address[address] |= (1 << bit);
+        } else {
+          display_address[address] &= ~(1 << bit);
+        }
+      }
+    }
+  }
+}
+
+void display_createQr(uint8_t qrcode[], const char *text) {
+  enum qrcodegen_Ecc errCorLvl = qrcodegen_Ecc_LOW;  // Error correction level
+  // Make and print the QR Code symbol
+  uint8_t tempBuffer[DISPLAY_QR_BUFFER_LEN_MAX];
+  bool ok = qrcodegen_encodeText(text, tempBuffer, qrcode, errCorLvl,
+                                 qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+                                 qrcodegen_Mask_AUTO, true);
 }

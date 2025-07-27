@@ -12,9 +12,10 @@
 
 #include "pico/async_context.h"
 
-#if APP_DOWNLOAD_HTTPS == 1
+#if FMANAGER_DOWNLOAD_HTTPS == 1
 #include "lwip/altcp.h"
 #include "lwip/altcp_tls.h"
+
 // Mbed TLS
 #include "mbedtls/ssl.h"  // Server Name Indication TLS extension
 #ifdef MBEDTLS_DEBUG_C
@@ -28,8 +29,8 @@
 #include "include/debug.h"
 #include "lwip/apps/http_client.h"
 
-#ifndef APP_DOWNLOAD_HTTPS
-#define APP_DOWNLOAD_HTTPS 0
+#ifndef FMANAGER_DOWNLOAD_HTTPS
+#define FMANAGER_DOWNLOAD_HTTPS 0
 #endif
 
 #ifndef HTTP_INFO
