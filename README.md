@@ -161,3 +161,6 @@ The SPI bus speed (1 MHz – 24 MHz; default is 12.5 MHz) affects all microSD ac
 ## 📜 License
 
 The source code is licensed under the [GNU General Public License v3.0](LICENSE).
+
+## 🤝 Contributing
+Made with ❤️ by [SidecarTridge](https://sidecartridge.com)
