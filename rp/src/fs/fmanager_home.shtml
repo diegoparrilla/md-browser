@@ -449,8 +449,8 @@
           <a href="#" class="pure-menu-link">File Manager</a>
         </li>
         <li class="pure-menu-item">
-          <a href="https://docs.sidecartridge.com/sidecartridge-multidevice/#do-you-want-to-test-the-new-alpha-firmware"
-            target="_blank" class="pure-menu-link">Help</a>
+          <a href="https://docs.sidecartridge.com/sidecartridge-multidevice/microfirmwares/browser/" target="_blank"
+            class="pure-menu-link">Help</a>
         </li>
       </ul>
     </div>
