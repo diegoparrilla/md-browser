@@ -2,11 +2,15 @@
 
 ## v2.1.1 (2026-07-30) - Upload stability fix
 
-This patch release fixes a serious regression introduced in v2.1.0: uploading several files in one go stopped the device after roughly 2 MB, and only a board reset brought it back.
+This patch release fixes a serious regression introduced in v2.1.0: uploading several files in one go stopped the device after roughly 2 MB, and only a board reset brought it back. Uploads are also noticeably faster.
+
+### Changes
+- Uploads to the microSD card are about 40% faster (measured 99 KB/s to 136 KB/s on a 2 MB file), by sending larger chunks and so spending far less time on per-chunk network overhead.
 
 ### Fixes
 - Uploading a large batch of files to the microSD card no longer halts the device after about 2 MB. Every upload chunk left a finished network connection parked for two minutes, so after a few hundred chunks they used up all the free memory. Uploads now complete at any size without needing a reset.
 - The device now copes with running low on memory instead of stopping dead: it frees what it can and carries on, where previously a single failed allocation halted the board.
+- A failed upload chunk is now reported instead of being silently ignored: previously a write error part-way through an upload was skipped over, leaving an incomplete file on the card presented as a successful upload.
 - Fixed a memory and directory-handle leak when a folder listing was too large to fit in the response buffer.
 
 ---

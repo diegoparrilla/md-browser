@@ -12,29 +12,84 @@
 #include "include/stx.h"
 #include "include/unzip.h"
 
+// Per-request tracing costs more than the work it traces. stdio is UART at
+// 115200 (86.8us/char), and the three per-chunk lines (post_begin URI,
+// post_finished, ssi_handler) are ~235 chars => ~20ms of blocking serial per
+// 4KB chunk, against ~16ms of actual SD write. That both distorts every timing
+// measured here and roughly halves upload throughput in debug builds. Off by
+// default; set to 1 to get the per-request lines back when tracing a specific
+// request. The UPL summary is unaffected (~100 chars per 32 chunks).
+#ifndef HTTPD_TRACE_PER_REQUEST
+#define HTTPD_TRACE_PER_REQUEST 0
+#endif
+
 #if defined(_DEBUG) && (_DEBUG != 0)
-// EPIC-13 diagnostics: watch the heap and the TIME-WAIT pcb population while a
-// batch upload runs, to attribute the ~200 bytes/chunk growth that exhausts the
-// ~95KB heap after ~477 chunks. MEM_STATS is unavailable under MEM_LIBC_MALLOC,
-// so newlib's mallinfo() is the real source of truth here.
+// Upload instrumentation. EPIC-13 used this to attribute the heap exhaustion to
+// TIME-WAIT pcbs (MEM_STATS is unavailable under MEM_LIBC_MALLOC, so newlib's
+// mallinfo() is the source of truth). EPIC-14 STORY-01 extends it with a timing
+// split: the decisive question for keep-alive is what share of a chunk's wall
+// time is the SD write versus everything else (connection setup/teardown,
+// request parsing, response). If sd% is already dominant, removing the
+// per-chunk connection churn cannot buy much and the epic should be re-aimed.
 #include <malloc.h>
 
 #include "lwip/priv/tcp_priv.h"
 
-#define UPLOAD_HEAP_PROBE_EVERY 32
+#define UPLOAD_STATS_EVERY 32
 
-static void upload_heap_probe(int chunk) {
-  if (chunk % UPLOAD_HEAP_PROBE_EVERY != 0) return;
+static uint64_t upload_win_start_us;  // wall clock at the window's first chunk
+static uint64_t upload_chunk_start_us;
+static uint64_t upload_sd_us;     // time inside f_write, this window
+static uint64_t upload_total_us;  // begin->finished, this window
+static uint32_t upload_bytes;     // bytes written, this window
+static uint32_t upload_chunks;    // chunks completed, this window
+
+static void upload_stats_begin(void) {
+  upload_chunk_start_us = time_us_64();
+  if (upload_win_start_us == 0) upload_win_start_us = upload_chunk_start_us;
+}
+
+// Wraps f_write so the SD time is measured without an #if at the call site.
+static FRESULT upload_write(FIL *fp, const void *buf, UINT btw, UINT *bw) {
+  const uint64_t started_us = time_us_64();
+  FRESULT fr = f_write(fp, buf, btw, bw);
+  upload_sd_us += time_us_64() - started_us;
+  upload_bytes += btw;
+  return fr;
+}
+
+static void upload_stats_end(void) {
+  if (upload_chunk_start_us == 0) return;
+  upload_total_us += time_us_64() - upload_chunk_start_us;
+  if (++upload_chunks < UPLOAD_STATS_EVERY) return;
+
+  uint64_t win_us = time_us_64() - upload_win_start_us;
+  if (win_us == 0) win_us = 1;
   struct mallinfo mi = mallinfo();
   int timewait = 0;
   for (struct tcp_pcb *pcb = tcp_tw_pcbs; pcb != NULL; pcb = pcb->next) {
     timewait++;
   }
-  DPRINTF("HEAP chunk=%d arena=%d used=%d free=%d tw_pcbs=%d\n", chunk,
-          (int)mi.arena, (int)mi.uordblks, (int)mi.fordblks, timewait);
+  // sd_pct is the share of per-chunk wall time spent writing to the card.
+  DPRINTF(
+      "UPL n=%u win=%ums rate=%u/s thr=%uKB/s sd=%uus tot=%uus sd_pct=%u "
+      "tw=%d free=%d\n",
+      (unsigned)upload_chunks, (unsigned)(win_us / 1000),
+      (unsigned)((uint64_t)upload_chunks * 1000000U / win_us),
+      (unsigned)((uint64_t)upload_bytes * 1000000U / win_us / 1024U),
+      (unsigned)(upload_sd_us / upload_chunks),
+      (unsigned)(upload_total_us / upload_chunks),
+      (unsigned)(upload_total_us ? upload_sd_us * 100U / upload_total_us : 0),
+      timewait, (int)mi.fordblks);
+
+  upload_win_start_us = 0;
+  upload_sd_us = upload_total_us = 0;
+  upload_bytes = upload_chunks = 0;
 }
 #else
-#define upload_heap_probe(chunk) ((void)0)
+#define upload_stats_begin() ((void)0)
+#define upload_stats_end() ((void)0)
+#define upload_write(fp, buf, btw, bw) f_write((fp), (buf), (btw), (bw))
 #endif
 
 static char json_buff[MAX_JSON_PAYLOAD_SIZE] = {0};  // Buffer for JSON payload
@@ -3529,7 +3584,9 @@ err_t httpd_post_begin(void *connection, const char *uri,
   LWIP_UNUSED_ARG(content_len);
   LWIP_UNUSED_ARG(response_uri);
   LWIP_UNUSED_ARG(response_uri_len);
+#if HTTPD_TRACE_PER_REQUEST
   DPRINTF("POST request for URI: %s\n", uri);
+#endif
   // Handle binary chunk upload via POST
   if (strncmp(uri, "/upload_chunk.cgi", sizeof("/upload_chunk.cgi") - 1) == 0) {
     // parse token and chunk index from querystring
@@ -3551,7 +3608,7 @@ err_t httpd_post_begin(void *connection, const char *uri,
       const char *c = strstr(qs, "chunk=");
       if (c) chunk = atoi(c + (sizeof("chunk=") - 1));
       if (ctx) {
-        upload_heap_probe(chunk);
+        upload_stats_begin();
         // seek to correct offset
         FRESULT fr = f_lseek(&ctx->file, (DWORD)(chunk * UPLOAD_CHUNK_SIZE));
         if (fr != FR_OK) {
@@ -3580,7 +3637,7 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
     // p->payload may be chained; write each segment
     struct pbuf *q;
     for (q = p; q != NULL; q = q->next) {
-      FRESULT fr = f_write(&st->ctx->file, q->payload, q->len, &written);
+      FRESULT fr = upload_write(&st->ctx->file, q->payload, q->len, &written);
       if (fr != FR_OK || written != q->len) {
         st->had_error = true;
         DPRINTF("POST receive: write failed fr=%d written=%u len=%u\n", fr,
@@ -3600,7 +3657,9 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
 
 void httpd_post_finished(void *connection, char *response_uri,
                          u16_t response_uri_len) {
+#if HTTPD_TRACE_PER_REQUEST
   DPRINTF("POST finished for connection\n");
+#endif
   // respond with JSON status
   post_chunk_state_t *st = find_post_chunk_state(connection);
   if (st && st->had_error) {
@@ -3609,6 +3668,7 @@ void httpd_post_finished(void *connection, char *response_uri,
     strcpy(json_buff, "{\"status\":\"chunk_ok\"}");
   }
   free_post_chunk_state(st);
+  upload_stats_end();
   // ensure LWIP returns our json
   if (response_uri_len > 0) {
     (void)snprintf(response_uri, response_uri_len, "%s", "/json.shtml");
@@ -3642,7 +3702,9 @@ static u16_t ssi_handler(int iIndex, char *pcInsert, int iInsertLen
                          void *connection_state
 #endif /* LWIP_HTTPD_FILE_STATE */
 ) {
+#if HTTPD_TRACE_PER_REQUEST
   DPRINTF("SSI handler called with index %d\n", iIndex);
+#endif
   size_t printed;
 #if defined(LWIP_HTTPD_FILE_STATE) && LWIP_HTTPD_FILE_STATE
   httpd_json_state_t *json_state = (httpd_json_state_t *)connection_state;

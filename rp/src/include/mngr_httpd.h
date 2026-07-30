@@ -72,8 +72,30 @@
 #endif
 #endif
 
+// Upload cost is dominated by per-CHUNK overhead, not per-byte: the client
+// round trip plus this chunk's connection setup/teardown measured a fixed
+// ~19ms regardless of size, so fewer/bigger chunks amortise it away. It also
+// cuts the TIME-WAIT population proportionally (tw ~= connections/s * 4s,
+// D-08), which is what keeps the heap off its limit. The SD card does NOT get
+// more efficient with bigger writes (measured 3.93us/byte at 4KB vs 4.11 at
+// 16KB, i.e. a flat ~245KB/s ceiling), so this only buys back overhead.
+//
+// The ceiling is NOT TCP_WND, it is main-loop blocking. cyw43 runs in poll
+// mode, so the radio is only serviced between poll cycles; a whole chunk can
+// arrive inside one cycle and the handler then blocks in f_write for the whole
+// of it. Measured: 4KB => ~16ms burst (fine), 16KB => ~67ms burst, which
+// reproducibly starved the driver ("[CYW43] do_ioctl: timeout" every run).
+// 8KB halves that to ~33ms. Do not raise this without re-checking for cyw43
+// timeouts on hardware -- throughput is not the binding constraint here.
+// Note the tempting fix (polling cyw43 between writes) is unsafe:
+// httpd_post_receive_data is itself called from the poll, so it would recurse
+// into lwIP. The structural fix is LWIP_HTTPD_POST_MANUAL_WND (EPIC-14).
+//
+// NOTE: this size assumes UPLOAD_CHUNK_METHOD "POST" (binary body). The legacy
+// base64 GET path inflates by 4/3 into a query parameter and cannot carry more
+// than a few KB, so it must not be re-enabled at this size.
 #ifndef UPLOAD_CHUNK_SIZE
-#define UPLOAD_CHUNK_SIZE 4096
+#define UPLOAD_CHUNK_SIZE 8192
 #endif
 
 // Default upload chunk method: "GET" (base64) or "POST" (binary)
