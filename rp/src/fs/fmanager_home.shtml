@@ -445,12 +445,15 @@
           for (let i = 0; i < totalChunks; i++) {
             const blob = file.slice(i * chunkSize, (i + 1) * chunkSize);
             if (this.uploadMethod === 'POST') {
-              // send raw binary POST
-              await fetch(`/upload_chunk.cgi?token=${encodeURIComponent(token)}` +
+              // send raw binary POST; read the reply so a failed chunk is
+              // reported instead of leaving result holding upload_start's
+              // response and silently writing a truncated file
+              res = await fetch(`/upload_chunk.cgi?token=${encodeURIComponent(token)}` +
                 `&chunk=${i}`, {
                 method: 'POST',
                 body: blob
               });
+              result = await res.json();
             } else {
               const buffer = await blob.arrayBuffer();
               let binary = '';
