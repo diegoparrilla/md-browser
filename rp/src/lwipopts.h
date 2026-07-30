@@ -60,6 +60,16 @@
 #define TCP_WND (20 * TCP_MSS)
 #define TCP_SND_BUF (8 * TCP_MSS)
 #define TCP_SND_QUEUELEN ((4 * (TCP_SND_BUF) + (TCP_MSS - 1)) / (TCP_MSS))
+// lwIP parks every closed connection in TIME-WAIT for 2*TCP_MSL, and the default
+// TCP_MSL of 60s means 120s. httpd cannot keep-alive an SSI response (the body
+// length is unknown, so it must close to delimit it - httpd.c:2442), and every
+// upload chunk answers with the SSI page /json.shtml. So a batch upload closes one
+// connection per 4KB chunk: at ~17 chunks/s none of them expire for two minutes and
+// they accumulate faster than the ~95KB heap can hold (hardware-measured: 515
+// TIME-WAIT pcbs = ~93KB consumed by chunk 480, starving the whole stack).
+// A 2s MSL (4s in TIME-WAIT) bounds that to ~70 pcbs / ~12KB while still being
+// thousands of round-trips on a LAN.
+#define TCP_MSL 2000UL
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK 1
 #define LWIP_NETIF_HOSTNAME 1
