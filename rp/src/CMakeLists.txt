@@ -327,6 +327,17 @@ add_definitions(-D_DEBUG=${_DEBUG})
 # is gated on _DEBUG (not NDEBUG), so debug builds still log.
 target_compile_definitions(${PROJECT_NAME} PRIVATE NDEBUG)
 
+# lwIP's memory-pressure recovery is predicated on malloc being allowed to fail.
+# tcp_alloc() reclaims TIME-WAIT/LAST-ACK/CLOSING pcbs, and pbuf_alloc() drops the
+# packet so TCP retransmits, ONLY when the allocation returns NULL. Since lwipopts.h
+# sets MEMP_MEM_MALLOC=1 those allocations route to malloc, and pico_malloc's default
+# PICO_MALLOC_PANIC=1 panics instead of returning NULL — so none of that recovery can
+# ever run and the first moment of pressure halts the board ("Out of memory" panic
+# after ~1.95MB of chunked upload). Let allocation fail so the stack can degrade and
+# recover instead. The heap/stack boundary stays enforced: _sbrk() itself refuses to
+# grow past __StackLimit and returns failure.
+target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_MALLOC_PANIC=0)
+
 # Device/Computer type
 add_definitions(-DDISPLAY_ATARIST)
 

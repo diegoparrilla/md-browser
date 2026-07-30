@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.1.1 (2026-07-30) - Upload stability fix
+
+This patch release fixes a serious regression introduced in v2.1.0: uploading several files in one go stopped the device after roughly 2 MB, and only a board reset brought it back.
+
+### Fixes
+- Uploading a large batch of files to the microSD card no longer halts the device after about 2 MB. Every upload chunk left a finished network connection parked for two minutes, so after a few hundred chunks they used up all the free memory. Uploads now complete at any size without needing a reset.
+- The device now copes with running low on memory instead of stopping dead: it frees what it can and carries on, where previously a single failed allocation halted the board.
+- Fixed a memory and directory-handle leak when a folder listing was too large to fit in the response buffer.
+
+---
+
 ## v2.1.0 (2026-07-18) - Downloads, archives & disk tools
 
 This release makes downloading behave like a real web browser — following redirects, supporting HTTPS, and naming files correctly — and adds new disk tools to the File Manager: extract `.zip` archives, convert `.STX` (Pasti) images to `.st`, and a paste-to-download shortcut.

@@ -11,6 +11,32 @@
 #include "include/stfs.h"
 #include "include/stx.h"
 #include "include/unzip.h"
+
+#if defined(_DEBUG) && (_DEBUG != 0)
+// EPIC-13 diagnostics: watch the heap and the TIME-WAIT pcb population while a
+// batch upload runs, to attribute the ~200 bytes/chunk growth that exhausts the
+// ~95KB heap after ~477 chunks. MEM_STATS is unavailable under MEM_LIBC_MALLOC,
+// so newlib's mallinfo() is the real source of truth here.
+#include <malloc.h>
+
+#include "lwip/priv/tcp_priv.h"
+
+#define UPLOAD_HEAP_PROBE_EVERY 32
+
+static void upload_heap_probe(int chunk) {
+  if (chunk % UPLOAD_HEAP_PROBE_EVERY != 0) return;
+  struct mallinfo mi = mallinfo();
+  int timewait = 0;
+  for (struct tcp_pcb *pcb = tcp_tw_pcbs; pcb != NULL; pcb = pcb->next) {
+    timewait++;
+  }
+  DPRINTF("HEAP chunk=%d arena=%d used=%d free=%d tw_pcbs=%d\n", chunk,
+          (int)mi.arena, (int)mi.uordblks, (int)mi.fordblks, timewait);
+}
+#else
+#define upload_heap_probe(chunk) ((void)0)
+#endif
+
 static char json_buff[MAX_JSON_PAYLOAD_SIZE] = {0};  // Buffer for JSON payload
 static int sdcard_status = SDCARD_INIT_ERROR;
 
@@ -854,7 +880,7 @@ static const char *cgi_folder(int iIndex, int iNumParams, char *pcParam[],
   }
   if (!json_appendf(json_buff, sizeof(json_buff), &json_len, "]")) {
     strcpy(json_buff, "[]");
-    return "/json.shtml";
+    goto cleanup;
   }
   if (truncated) {
     DPRINTF("Folder listing truncated to fit JSON buffer\n");
@@ -3525,6 +3551,7 @@ err_t httpd_post_begin(void *connection, const char *uri,
       const char *c = strstr(qs, "chunk=");
       if (c) chunk = atoi(c + (sizeof("chunk=") - 1));
       if (ctx) {
+        upload_heap_probe(chunk);
         // seek to correct offset
         FRESULT fr = f_lseek(&ctx->file, (DWORD)(chunk * UPLOAD_CHUNK_SIZE));
         if (fr != FR_OK) {
