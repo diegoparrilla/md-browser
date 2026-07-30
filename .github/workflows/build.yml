@@ -30,7 +30,13 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential libstdc++-arm-none-eabi-newlib
 
     - name: Install AtariST Toolkit Docker image
-      run: curl -sL https://github.com/sidecartridge/atarist-toolkit-docker/releases/download/v1.2.1/install_atarist_toolkit_docker.sh | bash
+      # -f and pipefail are load-bearing: with plain `curl -sL ... | bash` a failed
+      # download is silent, bash gets an empty script and exits 0, so the step goes
+      # green having installed nothing and the build then dies with a confusing
+      # "stcmd: command not found" (v2.1.1 release, run 30564106865).
+      run: |
+        set -o pipefail
+        curl -sSLf https://github.com/sidecartridge/atarist-toolkit-docker/releases/download/v1.3.0/install_atarist_toolkit_docker.sh | bash
 
     - name: Run - Build PICO_W release version
       run: ./build.sh pico_w Release ${{ secrets.APP_UUID }}
