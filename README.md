@@ -2,6 +2,8 @@
 
 This microfirmware app for the **SidecarTridge Multi-device** lets you browse and download floppy images from the public database, manage files on your microSD card, and work directly with Atari ST disk images from a simple web interface.
 
+> 🛒 **Get the hardware:** [SidecarTridge Multi-device](https://sidecartridge.com/products/sidecartridge-multidevice-atari-st/)
+
 ## 🚀 Installation
 
 To install the File & Download Manager app on your SidecarTridge Multi-device:
