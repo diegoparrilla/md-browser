@@ -1,4 +1,14 @@
+<div align="center">
+
+<img src="icon.png" alt="File & Download Manager" width="180" />
+
 # SidecarTridge Multi-device File & Download Manager
+
+[![Build](https://github.com/sidecartridge/md-browser/actions/workflows/build.yml/badge.svg)](https://github.com/sidecartridge/md-browser/actions/workflows/build.yml)
+[![Release](https://github.com/sidecartridge/md-browser/actions/workflows/release.yml/badge.svg)](https://github.com/sidecartridge/md-browser/actions/workflows/release.yml)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+
+</div>
 
 This microfirmware app for the **SidecarTridge Multi-device** lets you browse and download floppy images from the public database, manage files on your microSD card, and work directly with Atari ST disk images from a simple web interface.
 
